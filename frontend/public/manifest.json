@@ -1,0 +1,18 @@
+{
+  "name": "FUE Border Control",
+  "short_name": "FUE Control",
+  "description": "Vuelos de llegada a Fuerteventura desde UK e Irlanda (control de pasaportes)",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#040814",
+  "theme_color": "#040814",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

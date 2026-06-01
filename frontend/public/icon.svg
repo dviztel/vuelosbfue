@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#071029"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#11264f" stroke-width="10"/>
+  <!-- avión estilizado -->
+  <g transform="rotate(45 256 256)">
+    <path d="M256 96 L286 256 L420 300 L420 332 L286 312 L280 392 L320 416 L320 440 L256 424 L192 440 L192 416 L232 392 L226 312 L92 332 L92 300 L226 256 Z"
+          fill="#ffb000"/>
+  </g>
+</svg>
