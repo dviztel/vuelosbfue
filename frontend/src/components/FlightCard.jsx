@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import {
   toCanaryTime,
   timesDiffer,
   describeStatus,
   airlineIcao,
   flightIata,
+  flightIcaoCode,
   airlineName,
-  originInfo,
+  fueSide,
+  endpointInfo,
 } from '../lib/format.js';
 
 const TONE_STYLES = {
@@ -16,75 +19,104 @@ const TONE_STYLES = {
   slate: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
 };
 
-export default function FlightCard({ flight }) {
-  const status = describeStatus(flight);
-  const arr = flight.arrival || {};
-  const origin = originInfo(flight);
+// `direction`: 'arrivals' | 'departures'.
+//  - arrivals  → mostramos el ORIGEN (UK/IRL) y la hora de LLEGADA a FUE.
+//  - departures→ mostramos el DESTINO (UK/IRL) y la hora de SALIDA de FUE.
+export default function FlightCard({ flight, direction }) {
+  const [open, setOpen] = useState(false);
 
-  const scheduled = toCanaryTime(arr.scheduled);
-  const estimated = toCanaryTime(arr.estimated);
-  const showEstimated = timesDiffer(arr.scheduled, arr.estimated);
+  const ep = endpointInfo(flight, direction); // aeropuerto UK/Irlanda
+  const side = fueSide(flight, direction); // lado FUE (de aquí sale la hora)
+  const status = describeStatus(flight, direction);
+
+  const scheduled = toCanaryTime(side.scheduled);
+  const estimated = toCanaryTime(side.estimated);
+  const showEstimated = timesDiffer(side.scheduled, side.estimated);
 
   const icao = airlineIcao(flight);
   const iata = flightIata(flight);
+  const flightCode = flightIcaoCode(flight); // EXS3130, RYR8042...
+  const timeLabel = direction === 'departures' ? 'Salida' : 'Llegada';
 
   return (
-    <article className="rounded-xl border border-tower-700 bg-tower-900/70 p-4 transition-colors hover:border-tower-600">
-      <div className="flex items-start justify-between gap-3">
-        {/* Códigos de vuelo (monospace, como las pantallas de AENA) */}
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2 font-mono">
-            <span className="text-lg font-bold tracking-wider text-amber-glow">{icao}</span>
-            <span className="text-lg font-bold tracking-wider text-slate-100">{iata}</span>
-          </div>
-          <div className="mt-0.5 truncate text-sm text-slate-400">{airlineName(flight)}</div>
-        </div>
-
-        {/* Estado */}
-        <span
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-            TONE_STYLES[status.tone] || TONE_STYLES.slate
-          }`}
-        >
-          {status.dot && (
-            <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse-glow" />
-          )}
-          {status.label}
-        </span>
-      </div>
-
-      <div className="mt-3 flex items-end justify-between gap-3">
-        {/* Origen */}
-        <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-widest text-slate-500">Origen</div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-base font-bold text-slate-100">
-              {origin.iata || '—'}
-            </span>
-            {origin.country && (
-              <span className="rounded bg-tower-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-                {origin.country}
+    <article className="overflow-hidden rounded-2xl border border-tower-700 bg-tower-800/70 transition-colors hover:border-tower-600">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 p-4 text-left"
+      >
+        {/* Ciudad (código) + número de vuelo */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1.5">
+            <span className="truncate text-base font-semibold text-slate-50">{ep.city}</span>
+            <span className="shrink-0 font-mono text-xs text-slate-400">({ep.iata})</span>
+            {ep.country && (
+              <span className="shrink-0 rounded bg-tower-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
+                {ep.country}
               </span>
             )}
           </div>
-          <div className="truncate text-sm text-slate-400">{origin.name}</div>
+          <div className="mt-1 font-mono text-sm text-slate-400">{flightCode}</div>
         </div>
 
-        {/* Horas (zona Canarias) */}
+        {/* Hora del evento en FUE (zona Canarias) */}
         <div className="shrink-0 text-right">
-          <div className="text-[11px] uppercase tracking-widest text-slate-500">
-            Llegada (Canarias)
-          </div>
-          <div className="font-mono text-2xl font-bold leading-tight text-slate-100">
+          <div className="font-mono text-xl font-bold leading-tight text-slate-50">
             {scheduled || '--:--'}
           </div>
           {showEstimated && estimated && (
-            <div className="font-mono text-sm font-semibold text-amber-glow">
-              est. {estimated}
-            </div>
+            <div className="font-mono text-xs font-semibold text-amber-glow">est. {estimated}</div>
           )}
         </div>
-      </div>
+
+        {/* Botón expandir (círculo claro, como el diseño) */}
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-200 text-xl font-light leading-none text-slate-800 shadow-sm transition-transform"
+          aria-hidden
+        >
+          {open ? '×' : '+'}
+        </span>
+      </button>
+
+      {/* Detalle desplegable */}
+      {open && (
+        <div className="border-t border-tower-700/70 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm text-slate-300">{airlineName(flight)}</div>
+              <div className="mt-0.5 font-mono text-xs text-slate-500">
+                {icao} · {iata}
+              </div>
+            </div>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                TONE_STYLES[status.tone] || TONE_STYLES.slate
+              }`}
+            >
+              {status.dot && (
+                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse-glow" />
+              )}
+              {status.label}
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span className="uppercase tracking-widest text-slate-500">
+              {ep.name}
+            </span>
+            <span className="text-slate-400">
+              {timeLabel}: <span className="font-mono text-slate-200">{scheduled || '--:--'}</span>
+              {showEstimated && estimated && (
+                <>
+                  {' '}
+                  → <span className="font-mono text-amber-glow">{estimated}</span>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

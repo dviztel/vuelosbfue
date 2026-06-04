@@ -34,6 +34,18 @@ export function toCanaryDateTime(iso) {
   }).format(d);
 }
 
+// Fecha larga legible ("4 de Junio de 2026") en hora de Canarias, con el
+// nombre del mes en mayúscula inicial (como en el diseño).
+export function toCanaryLongDate(date = new Date()) {
+  const s = new Intl.DateTimeFormat('es-ES', {
+    timeZone: CANARY_TZ,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+  return s.replace(/ de ([a-zà-ÿ]+) de /, (_, mon) => ` de ${mon.charAt(0).toUpperCase()}${mon.slice(1)} de `);
+}
+
 // ¿La hora estimada difiere de la programada? (margen > 1 min)
 export function timesDiffer(scheduledIso, estimatedIso) {
   if (!scheduledIso || !estimatedIso) return false;
@@ -52,17 +64,32 @@ export function delayMinutes(scheduledIso, estimatedIso) {
   return Math.round((e - s) / 60000);
 }
 
+// El "lado FUE" del vuelo según la dirección: en llegadas miramos arrival,
+// en salidas departure. De ahí sale la hora grande de la tarjeta.
+export function fueSide(flight, direction) {
+  return direction === 'departures' ? flight?.departure || {} : flight?.arrival || {};
+}
+
+// El "otro extremo" (siempre el aeropuerto UK/Irlanda que filtramos): en
+// llegadas es el origen (departure), en salidas el destino (arrival).
+export function otherSide(flight, direction) {
+  return direction === 'departures' ? flight?.arrival || {} : flight?.departure || {};
+}
+
 // Mapeo del estado de AviationStack → etiqueta + color + icono.
 // Estados posibles de la API: scheduled, active, landed, cancelled,
 // incident, diverted. Añadimos "retrasado" como derivado.
-export function describeStatus(flight) {
+// `direction` ajusta la etiqueta (Aterrizado vs Despegado).
+export function describeStatus(flight, direction = 'arrivals') {
   const raw = flight?.flight_status || 'scheduled';
-  const arr = flight?.arrival || {};
-  const delay = delayMinutes(arr.scheduled, arr.estimated);
+  const side = fueSide(flight, direction);
+  const delay = delayMinutes(side.scheduled, side.estimated);
 
   switch (raw) {
     case 'landed':
-      return { key: 'landed', label: 'Aterrizado', tone: 'green', dot: false };
+      return direction === 'departures'
+        ? { key: 'landed', label: 'Despegado', tone: 'green', dot: false }
+        : { key: 'landed', label: 'Aterrizado', tone: 'green', dot: false };
     case 'active':
       return { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
     case 'cancelled':
@@ -95,21 +122,31 @@ export function flightIata(flight) {
   return (flight?.flight?.iata || flight?.flight?.icao || flight?.flight?.number || '—').toUpperCase();
 }
 
+// Número de vuelo en formato ICAO (EXS3130, RYR8042...), como en las pantallas
+// del aeropuerto. Si la API no lo trae, lo componemos: ICAO aerolínea + número.
+export function flightIcaoCode(flight) {
+  const icao = flight?.flight?.icao;
+  if (icao) return icao.toUpperCase();
+  const num = flight?.flight?.number || (flight?.flight?.iata || '').replace(/^[A-Za-z]+/, '');
+  return num ? `${airlineIcao(flight)}${num}` : (flight?.flight?.iata || '—').toUpperCase();
+}
+
 // Nombre legible de la aerolínea: el de la API, o el del mapa por ICAO.
 export function airlineName(flight) {
   const icao = airlineIcao(flight);
   return flight?.airline?.name || AIRLINE_BY_ICAO[icao] || icao;
 }
 
-// Origen: { iata, name }. Usa el nombre de nuestra config si lo tenemos,
-// si no el que devuelva la API.
-export function originInfo(flight) {
-  const dep = flight?.departure || {};
-  const iata = (dep.iata || '').toUpperCase();
+// Aeropuerto UK/Irlanda del vuelo (origen en llegadas, destino en salidas):
+// { iata, city, name, country }. Usa nuestra config si lo tenemos.
+export function endpointInfo(flight, direction) {
+  const side = otherSide(flight, direction);
+  const iata = (side.iata || '').toUpperCase();
   const known = AIRPORT_BY_IATA[iata];
   return {
     iata,
-    name: known?.name || dep.airport || iata || '—',
+    city: known?.city || side.airport || iata || '—',
+    name: known?.name || side.airport || iata || '—',
     country: known?.country || null,
   };
 }

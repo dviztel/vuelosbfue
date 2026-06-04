@@ -7,6 +7,9 @@
 //   - La API key del usuario (cada persona la suya).
 //   - El contador de consumo (100 req/mes) por key.
 //   - La caché de la última respuesta (para no gastar requests al abrir).
+//
+//  Hay DOS sentidos (llegadas y salidas a/desde FUE). Un refresco trae los dos
+//  → gasta 2 requests. Cada sentido se cachea por separado.
 // =============================================================================
 
 const LIMIT = 100; // requests/mes del plan gratuito de AviationStack
@@ -107,6 +110,20 @@ function withMeta(usage) {
   return { ...usage, limit: LIMIT, usingServerKey: false };
 }
 
+// Construye la respuesta que consume la app a partir de la caché por sentido.
+function buildResult(cache, cached) {
+  const arr = cache?.arrivals;
+  const dep = cache?.departures;
+  const times = [arr?.fetchedAt, dep?.fetchedAt].filter(Boolean).sort();
+  return {
+    arrivals: Array.isArray(arr?.list) ? arr.list : [],
+    departures: Array.isArray(dep?.list) ? dep.list : [],
+    fetchedAt: times.length ? times[times.length - 1] : null,
+    cached,
+    usage: withMeta(readUsage()),
+  };
+}
+
 // --- API pública usada por la app -------------------------------------------
 
 // En producción no hay key de servidor (la URL es pública). Forzar diálogo.
@@ -126,22 +143,13 @@ export async function resetUsage() {
   return withMeta(all[id]);
 }
 
-// Llamada REAL al proxy → gasta 1 request del cupo de esta key.
-async function fetchFromApi() {
-  const usage = readUsage();
-  if (usage.count >= LIMIT) {
-    const err = new Error(`Has alcanzado el límite de ${LIMIT} requests este mes.`);
-    err.usage = withMeta(usage);
-    throw err;
-  }
-
+// Una llamada REAL al proxy para un sentido. Gasta 1 request al tener éxito.
+async function fetchDirection(direction) {
   let res;
   try {
-    res = await fetch('/api/flights', { headers: { ...authHeaders() } });
+    res = await fetch(`/api/flights?direction=${direction}`, { headers: { ...authHeaders() } });
   } catch {
-    const err = new Error('No se pudo contactar con el servidor.');
-    err.usage = withMeta(usage);
-    throw err;
+    throw new Error('No se pudo contactar con el servidor.');
   }
 
   let body;
@@ -151,36 +159,57 @@ async function fetchFromApi() {
     body = null;
   }
 
-  if (!res.ok) {
-    const err = new Error(body?.error || `Error ${res.status}`);
-    err.usage = withMeta(usage);
+  if (!res.ok) throw new Error(body?.error || `Error ${res.status}`);
+
+  bumpUsage(); // solo contamos si la API respondió OK
+  const list = Array.isArray(body?.flights?.data) ? body.flights.data : [];
+  return { list, fetchedAt: body?.fetchedAt || null };
+}
+
+// Refresco REAL de AMBOS sentidos. Gasta hasta 2 requests.
+async function fetchBoth() {
+  const usage0 = readUsage();
+  if (usage0.count >= LIMIT) {
+    const err = new Error(`Has alcanzado el límite de ${LIMIT} requests este mes.`);
+    err.usage = withMeta(usage0);
     throw err;
   }
 
-  const bumped = bumpUsage();
-  const payload = { data: body.flights, fetchedAt: body.fetchedAt };
-  writeLS(CACHE_STORAGE, payload);
+  const cache = readLS(CACHE_STORAGE, {}) || {};
+  const [aRes, dRes] = await Promise.allSettled([
+    fetchDirection('arrivals'),
+    fetchDirection('departures'),
+  ]);
 
-  return { flights: payload.data, fetchedAt: payload.fetchedAt, cached: false, usage: withMeta(bumped) };
+  if (aRes.status === 'fulfilled') cache.arrivals = aRes.value;
+  if (dRes.status === 'fulfilled') cache.departures = dRes.value;
+  writeLS(CACHE_STORAGE, cache);
+
+  // Si los dos fallan, propagamos el error (con el consumo actual).
+  if (aRes.status === 'rejected' && dRes.status === 'rejected') {
+    const err = new Error(aRes.reason?.message || dRes.reason?.message || 'Error al actualizar.');
+    err.usage = withMeta(readUsage());
+    throw err;
+  }
+
+  return buildResult(cache, false);
 }
 
 // Carga "barata": usa la caché del dispositivo (NO gasta). Si no hay caché y
-// hay key, hace una primera consulta real. Sin key, devuelve vacío (la app
-// abrirá el diálogo para que el usuario meta su clave).
+// hay key, hace una primera consulta real (ambos sentidos). Sin key, devuelve
+// vacío (la app abrirá el diálogo para que el usuario meta su clave).
 export async function getFlights() {
   const cache = readLS(CACHE_STORAGE, null);
-  const usage = readUsage();
-
-  if (cache) {
-    return { flights: cache.data, fetchedAt: cache.fetchedAt, cached: true, usage: withMeta(usage) };
+  if (cache && (cache.arrivals || cache.departures)) {
+    return buildResult(cache, true);
   }
   if (!getApiKey()) {
-    return { flights: { data: [] }, fetchedAt: null, cached: false, usage: withMeta(usage) };
+    return buildResult({}, false);
   }
-  return fetchFromApi();
+  return fetchBoth();
 }
 
-// Refresco REAL: siempre llama al proxy y gasta 1 request.
+// Refresco REAL: siempre llama al proxy (ambos sentidos) y gasta requests.
 export async function refreshFlights() {
-  return fetchFromApi();
+  return fetchBoth();
 }

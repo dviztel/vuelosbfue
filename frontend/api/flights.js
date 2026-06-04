@@ -10,6 +10,11 @@
 //  caché viven en el navegador de cada usuario (localStorage), porque cada
 //  persona usa SU propia API key.
 //
+//  DIRECCIÓN (?direction=arrivals|departures):
+//   - arrivals   → vuelos que LLEGAN a FUE   (arr_iata=FUE)
+//   - departures → vuelos que SALEN de FUE   (dep_iata=FUE)
+//   El filtro UK/Irlanda lo aplica el frontend sobre el otro extremo.
+//
 //  API KEY:
 //   - Se toma de la cabecera "x-api-key" que envía el frontend.
 //   - process.env.AVIATIONSTACK_KEY es un fallback SOLO para desarrollo local.
@@ -17,7 +22,7 @@
 //        gastaría tu cupo. En producción cada usuario mete su propia key.
 // =============================================================================
 
-const ARRIVAL_IATA = process.env.ARR_IATA || 'FUE';
+const FUE_IATA = process.env.FUE_IATA || 'FUE';
 const API_BASE = 'http://api.aviationstack.com/v1/flights';
 
 export default async function handler(req, res) {
@@ -31,10 +36,17 @@ export default async function handler(req, res) {
     });
   }
 
+  // Dirección del listado. Por defecto, llegadas (compatibilidad).
+  const direction =
+    (req.query?.direction || '').toString().toLowerCase() === 'departures'
+      ? 'departures'
+      : 'arrivals';
+  const param = direction === 'departures' ? 'dep_iata' : 'arr_iata';
+
   try {
     const url =
       `${API_BASE}?access_key=${encodeURIComponent(key)}` +
-      `&arr_iata=${encodeURIComponent(ARRIVAL_IATA)}&limit=100`;
+      `&${param}=${encodeURIComponent(FUE_IATA)}&limit=100`;
 
     const r = await fetch(url);
     const data = await r.json();
@@ -47,7 +59,9 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ flights: data, fetchedAt: new Date().toISOString() });
+    return res
+      .status(200)
+      .json({ flights: data, direction, fetchedAt: new Date().toISOString() });
   } catch (e) {
     return res.status(500).json({ error: e?.message || 'Error al contactar AviationStack' });
   }

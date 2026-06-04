@@ -15,8 +15,8 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 50% -10%, #11264f 0%, transparent 60%),
-    #040814;
+    radial-gradient(1200px 600px at 50% -10%, #233247 0%, transparent 60%),
+    #141d27;
   color: #e6edf7;
   -webkit-font-smoothing: antialiased;
   /* respeta el notch en móviles */

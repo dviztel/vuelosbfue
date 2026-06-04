@@ -1,13 +1,13 @@
 import FlightCard from './FlightCard.jsx';
 
-export default function FlightList({ flights, loading }) {
+export default function FlightList({ flights, direction, loading }) {
   if (loading && flights.length === 0) {
     return (
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-[120px] animate-pulse rounded-xl border border-tower-700 bg-tower-900/50"
+            className="h-[88px] animate-pulse rounded-2xl border border-tower-700 bg-tower-800/50"
           />
         ))}
       </div>
@@ -15,14 +15,13 @@ export default function FlightList({ flights, loading }) {
   }
 
   if (flights.length === 0) {
+    const what = direction === 'departures' ? 'salidas hacia' : 'llegadas desde';
     return (
-      <div className="rounded-xl border border-dashed border-tower-700 bg-tower-900/40 py-12 text-center">
-        <div className="text-3xl">🛬</div>
-        <p className="mt-2 text-sm font-medium text-slate-300">
-          No hay llegadas desde UK/Irlanda
-        </p>
+      <div className="rounded-2xl border border-dashed border-tower-700 bg-tower-800/40 py-12 text-center">
+        <div className="text-3xl">{direction === 'departures' ? '🛫' : '🛬'}</div>
+        <p className="mt-2 text-sm font-medium text-slate-300">No hay {what} UK/Irlanda</p>
         <p className="mt-1 text-xs text-slate-500">
-          en los datos cargados. Pulsa actualizar para consultar de nuevo.
+          en los datos cargados. Pulsa ↻ para consultar de nuevo.
         </p>
       </div>
     );
@@ -31,7 +30,11 @@ export default function FlightList({ flights, loading }) {
   return (
     <div className="space-y-3">
       {flights.map((f, i) => (
-        <FlightCard key={`${f.flight?.iata || f.flight?.icao || 'x'}-${i}`} flight={f} />
+        <FlightCard
+          key={`${f.flight?.iata || f.flight?.icao || 'x'}-${i}`}
+          flight={f}
+          direction={direction}
+        />
       ))}
     </div>
   );

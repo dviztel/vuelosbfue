@@ -12,24 +12,33 @@ serverless (`frontend/api/flights.js`, el puente HTTP→HTTPS) van juntos.
 
 ## 1) Subir el proyecto a GitHub
 
-1. Crea una cuenta en https://github.com (si no tienes).
-2. Crea un repositorio nuevo, p. ej. `fue-border-control` (privado o público, da igual).
-3. En tu PC, dentro de la carpeta del proyecto, abre una terminal y ejecuta:
+✅ **El repositorio git YA está creado y con el primer commit hecho** (lo hizo
+Claude). El `.gitignore` ya deja fuera tu `.env`, `node_modules` y `dist`.
+Solo falta **publicarlo** en GitHub. Tienes dos formas:
 
-   ```bash
-   cd "C:\Users\DaVid AnDreS\Desktop\Claude Docs\FUE Border Control"
-   git init
-   git add .
-   git commit -m "FUE Border Control"
-   git branch -M main
-   git remote add origin https://github.com/TU_USUARIO/fue-border-control.git
-   git push -u origin main
-   ```
+### Opción A — GitHub Desktop (sin comandos, recomendada)
 
-   El `.gitignore` ya evita que se suba tu `.env`, los `node_modules` ni el `dist`.
+1. Instala **GitHub Desktop** desde https://desktop.github.com
+2. Ábrelo e inicia sesión con tu cuenta de GitHub (te abre el navegador).
+3. Menú **File → Add local repository…** y elige la carpeta:
+   `C:\Users\DaVid AnDreS\Desktop\Claude Docs\FUE Border Control`
+4. Pulsa **Publish repository** (puedes dejarlo privado). ¡Listo!
 
-   > 💡 Si te pide login, GitHub ya no acepta contraseña: usa el navegador
-   > (GitHub Desktop o `gh auth login`) o un *Personal Access Token*.
+### Opción B — Comandos (PowerShell)
+
+> ⚠️ Pega las líneas **una a una en PowerShell**. NO escribas la palabra
+> `bash` ni las comillas ```` ``` ````: eso es solo formato del documento.
+
+1. Crea un repo vacío en https://github.com/new (nómbralo `fue-border-control`,
+   **sin** marcar "Add a README").
+2. En PowerShell, pega estas tres líneas (cambia `TU_USUARIO`):
+
+       cd "C:\Users\DaVid AnDreS\Desktop\Claude Docs\FUE Border Control"
+       git remote add origin https://github.com/TU_USUARIO/fue-border-control.git
+       git push -u origin main
+
+3. La primera vez se abrirá una ventana del navegador para iniciar sesión en
+   GitHub (no hace falta escribir contraseñas ni tokens). Acepta y se sube solo.
 
 ---
 

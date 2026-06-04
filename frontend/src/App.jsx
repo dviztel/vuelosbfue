@@ -13,12 +13,16 @@ import {
   setApiKey,
 } from './lib/api.js';
 import { MONITORED_IATA } from './config/airports.js';
+import { toCanaryLongDate } from './lib/format.js';
 
 // Intervalos disponibles para el auto-refresh (en minutos).
 const AUTO_INTERVALS = [15, 30, 60];
 
 export default function App() {
-  const [raw, setRaw] = useState([]); // todos los arrivals que devuelve la API
+  const [arrivalsRaw, setArrivalsRaw] = useState([]); // vuelos que LLEGAN a FUE
+  const [departuresRaw, setDeparturesRaw] = useState([]); // vuelos que SALEN de FUE
+  const [tab, setTab] = useState('departures'); // 'departures' | 'arrivals'
+
   const [fetchedAt, setFetchedAt] = useState(null);
   const [cached, setCached] = useState(false);
   const [usage, setUsage] = useState({ count: 0, limit: 100 });
@@ -29,45 +33,51 @@ export default function App() {
   const [dialog, setDialog] = useState(null); // { type: 'refresh' | 'reset' | 'auto' }
 
   // --- API key por usuario -------------------------------------------------
-  const [apiKey, setApiKeyState] = useState(getApiKey()); // key guardada (este equipo)
-  const [hasServerKey, setHasServerKey] = useState(false); // fallback en el .env
+  const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [hasServerKey, setHasServerKey] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
 
   const autoTimer = useRef(null);
 
   // -------------------------------------------------------------------------
-  //  Filtrado: SOLO orígenes UK/Irlanda, ordenados por hora de llegada.
+  //  Filtrado: SOLO el extremo UK/Irlanda, ordenado por la hora en FUE.
+  //   - Llegadas: filtra por ORIGEN (departure), ordena por hora de llegada.
+  //   - Salidas:  filtra por DESTINO (arrival),  ordena por hora de salida.
   // -------------------------------------------------------------------------
   const flights = useMemo(() => {
+    const isDep = tab === 'departures';
+    const raw = isDep ? departuresRaw : arrivalsRaw;
     return raw
       .filter((f) => {
-        const dep = (f?.departure?.iata || '').toUpperCase();
-        return MONITORED_IATA.has(dep);
+        const otherIata = (
+          (isDep ? f?.arrival?.iata : f?.departure?.iata) || ''
+        ).toUpperCase();
+        return MONITORED_IATA.has(otherIata);
       })
       .sort((a, b) => {
-        const ta = new Date(a?.arrival?.scheduled || 0).getTime();
-        const tb = new Date(b?.arrival?.scheduled || 0).getTime();
+        const ta = new Date((isDep ? a?.departure : a?.arrival)?.scheduled || 0).getTime();
+        const tb = new Date((isDep ? b?.departure : b?.arrival)?.scheduled || 0).getTime();
         return ta - tb;
       });
-  }, [raw]);
+  }, [arrivalsRaw, departuresRaw, tab]);
 
   // -------------------------------------------------------------------------
   //  Carga / refresco
   // -------------------------------------------------------------------------
   function applyResponse(data) {
-    setRaw(Array.isArray(data.flights?.data) ? data.flights.data : []);
+    setArrivalsRaw(Array.isArray(data.arrivals) ? data.arrivals : []);
+    setDeparturesRaw(Array.isArray(data.departures) ? data.departures : []);
     setFetchedAt(data.fetchedAt || null);
     setCached(Boolean(data.cached));
     if (data.usage) setUsage(data.usage);
     setError(null);
   }
 
-  // Carga inicial: usa caché del backend (NO gasta request salvo la 1ª vez).
+  // Carga inicial: usa caché del dispositivo (NO gasta salvo la 1ª vez).
   async function initialLoad() {
     setLoading(true);
     try {
-      const data = await getFlights();
-      applyResponse(data);
+      applyResponse(await getFlights());
     } catch (e) {
       setError(e.message);
       if (e.usage) setUsage(e.usage);
@@ -76,12 +86,11 @@ export default function App() {
     }
   }
 
-  // Refresco real: GASTA 1 request.
+  // Refresco real: GASTA hasta 2 requests (llegadas + salidas).
   async function doRefresh() {
     setLoading(true);
     try {
-      const data = await refreshFlights();
-      applyResponse(data);
+      applyResponse(await refreshFlights());
     } catch (e) {
       setError(e.message);
       if (e.usage) setUsage(e.usage);
@@ -92,17 +101,13 @@ export default function App() {
 
   async function doReset() {
     try {
-      const u = await resetUsage();
-      setUsage(u);
+      setUsage(await resetUsage());
     } catch (e) {
       setError(e.message);
     }
   }
 
   useEffect(() => {
-    // Comprobamos si el servidor tiene key de fallback. Si NO hay ni key
-    // local ni de servidor, forzamos el diálogo para que el usuario meta
-    // la suya antes de poder traer vuelos.
     (async () => {
       let serverKey = false;
       try {
@@ -110,15 +115,12 @@ export default function App() {
         serverKey = Boolean(health?.hasServerKey);
         setHasServerKey(serverKey);
       } catch {
-        /* si /health falla, seguimos: initialLoad mostrará el error */
+        /* si /health falla, seguimos */
       }
-      if (!getApiKey() && !serverKey) {
-        setShowKeyDialog(true);
-      }
+      if (!getApiKey() && !serverKey) setShowKeyDialog(true);
       await initialLoad();
     })();
 
-    // Registro del service worker (PWA) solo en producción.
     if ('serviceWorker' in navigator && import.meta.env.PROD) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
@@ -129,11 +131,10 @@ export default function App() {
   //  Guardar / borrar la API key del usuario
   // -------------------------------------------------------------------------
   function handleSaveKey(key) {
-    setApiKey(key); // persiste en localStorage (vacío = borra)
+    setApiKey(key);
     setApiKeyState(key);
     setShowKeyDialog(false);
     setError(null);
-    // Recargamos con la nueva key (usa caché, no gasta request).
     initialLoad();
   }
 
@@ -151,10 +152,7 @@ export default function App() {
   useEffect(() => {
     if (autoTimer.current) clearInterval(autoTimer.current);
     if (autoMinutes > 0) {
-      autoTimer.current = setInterval(() => {
-        // El auto-refresh gasta requests; por eso avisamos al activarlo.
-        doRefresh();
-      }, autoMinutes * 60 * 1000);
+      autoTimer.current = setInterval(() => doRefresh(), autoMinutes * 60 * 1000);
     }
     return () => autoTimer.current && clearInterval(autoTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,14 +172,42 @@ export default function App() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full max-w-md flex-col gap-4 px-4 py-5">
+    <div className="mx-auto flex min-h-full max-w-md flex-col gap-3 px-4 py-5">
       <Header
+        onSettings={() => setShowKeyDialog(true)}
+        onRefresh={() => setDialog({ type: 'refresh' })}
+        refreshing={loading}
+        refreshDisabled={loading || cupoAgotado}
         fetchedAt={fetchedAt}
         cached={cached}
         count={flights.length}
-        onSettings={() => setShowKeyDialog(true)}
       />
 
+      {/* Pestañas Salidas / Llegadas */}
+      <div className="grid grid-cols-2 gap-1 rounded-full border border-tower-700 bg-tower-900/60 p-1">
+        <TabButton active={tab === 'departures'} onClick={() => setTab('departures')}>
+          Salidas
+        </TabButton>
+        <TabButton active={tab === 'arrivals'} onClick={() => setTab('arrivals')}>
+          Llegadas
+        </TabButton>
+      </div>
+
+      {/* Barra de fecha */}
+      <div className="flex items-center justify-between rounded-xl bg-amber-glow px-4 py-2.5 text-tower-950">
+        <span className="text-sm font-bold">Hoy</span>
+        <span className="text-sm font-semibold">{toCanaryLongDate()}</span>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
+          ⚠️ {error}
+        </div>
+      )}
+
+      <FlightList flights={flights} direction={tab} loading={loading} />
+
+      {/* Controles de API (consumo + auto-refresco) */}
       <ApiUsageBar
         count={usage.count}
         limit={usage.limit}
@@ -190,24 +216,6 @@ export default function App() {
         onEditKey={() => setShowKeyDialog(true)}
       />
 
-      {/* Botón de actualización manual */}
-      <button
-        onClick={() => setDialog({ type: 'refresh' })}
-        disabled={loading || cupoAgotado}
-        className="flex items-center justify-center gap-2 rounded-xl bg-amber-glow py-3 text-sm font-bold text-tower-950 shadow-glow transition-all hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {loading ? (
-          <>
-            <Spinner /> Consultando…
-          </>
-        ) : cupoAgotado ? (
-          'Cupo mensual agotado'
-        ) : (
-          <>↻ Actualizar vuelos (gasta 1 request)</>
-        )}
-      </button>
-
-      {/* Auto-refresh opcional */}
       <div className="flex items-center justify-between rounded-lg border border-tower-700 bg-tower-900/50 px-3 py-2">
         <span className="text-xs text-slate-400">Auto-refresco</span>
         <div className="flex gap-1">
@@ -226,23 +234,15 @@ export default function App() {
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
-          ⚠️ {error}
-        </div>
-      )}
-
-      <FlightList flights={flights} loading={loading} />
-
-      <footer className="mt-auto pt-4 text-center text-[10px] text-slate-600">
-        Horas en zona Atlantic/Canary · datos vía AviationStack (proxy backend)
+      <footer className="mt-auto pt-2 text-center text-[10px] text-slate-600">
+        Horas en zona Atlantic/Canary · datos vía AviationStack · solo vuelos de hoy
       </footer>
 
       {/* Diálogos de confirmación */}
       <ConfirmDialog
         open={dialog?.type === 'refresh'}
         title="¿Actualizar vuelos?"
-        message={`Esto consume 1 request de tu cupo mensual (${usage.count}/${usage.limit} usados). ¿Continuar?`}
+        message={`Trae llegadas Y salidas → consume 2 requests de tu cupo mensual (${usage.count}/${usage.limit} usados). ¿Continuar?`}
         confirmLabel="Sí, actualizar"
         onConfirm={handleConfirm}
         onCancel={() => setDialog(null)}
@@ -259,7 +259,7 @@ export default function App() {
       <ConfirmDialog
         open={dialog?.type === 'auto'}
         title="¿Activar auto-refresco?"
-        message={`Se actualizará automáticamente cada ${dialog?.minutes} min. OJO: cada actualización consume 1 request del cupo mensual.`}
+        message={`Se actualizará cada ${dialog?.minutes} min. OJO: cada actualización consume 2 requests (llegadas + salidas) del cupo mensual.`}
         confirmLabel="Activar"
         onConfirm={handleConfirm}
         onCancel={() => setDialog(null)}
@@ -278,14 +278,12 @@ export default function App() {
   );
 }
 
-function IntervalButton({ active, onClick, children }) {
+function TabButton({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1 font-mono text-xs font-semibold transition-colors ${
-        active
-          ? 'bg-amber-glow text-tower-950'
-          : 'bg-tower-700/60 text-slate-300 hover:bg-tower-700'
+      className={`rounded-full py-2 text-sm font-semibold transition-colors ${
+        active ? 'bg-amber-glow text-tower-950 shadow-glow' : 'text-slate-300 hover:text-slate-100'
       }`}
     >
       {children}
@@ -293,11 +291,15 @@ function IntervalButton({ active, onClick, children }) {
   );
 }
 
-function Spinner() {
+function IntervalButton({ active, onClick, children }) {
   return (
-    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
+    <button
+      onClick={onClick}
+      className={`rounded-md px-2.5 py-1 font-mono text-xs font-semibold transition-colors ${
+        active ? 'bg-amber-glow text-tower-950' : 'bg-tower-700/60 text-slate-300 hover:bg-tower-700'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
