@@ -1,6 +1,6 @@
 // Service worker mínimo: solo para que la app sea instalable como PWA.
-// NO cacheamos /api (los datos de vuelos deben venir siempre frescos del
-// backend, que ya gestiona su propia caché y el contador de requests).
+// NO cacheamos /api: la función serverless devuelve datos siempre frescos y
+// la caché/contador de requests se gestionan en el navegador (localStorage).
 const CACHE = 'fue-shell-v1';
 const SHELL = ['/', '/index.html', '/manifest.json', '/icon.svg'];
 

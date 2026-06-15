@@ -1,12 +1,12 @@
 {
-  "name": "FUE Border Control",
-  "short_name": "FUE Control",
-  "description": "Vuelos de llegada a Fuerteventura desde UK e Irlanda (control de pasaportes)",
+  "name": "No Schengen Flights · FUE",
+  "short_name": "Vuelos FUE",
+  "description": "Vuelos no-Schengen (UK e Irlanda) a/desde Fuerteventura — control de pasaportes",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#040814",
-  "theme_color": "#040814",
+  "background_color": "#10171f",
+  "theme_color": "#141d27",
   "icons": [
     {
       "src": "/icon.svg",

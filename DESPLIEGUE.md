@@ -74,13 +74,15 @@ lleva en el propio dispositivo.
 
 ## Desarrollo local (opcional)
 
-Para probar en tu PC antes de desplegar necesitas **dos terminales** dentro de `frontend/`:
+Para probar en tu PC antes de desplegar, **un solo comando** dentro de `frontend/`:
 
 ```bash
 npm install        # solo la primera vez
-npm run dev:api    # terminal 1 → API local en :3001
-npm run dev        # terminal 2 → web en http://localhost:5173
+npm run dev        # web + API local en http://localhost:5173
 ```
 
-La carpeta `backend/` es el servidor antiguo y **ya no se usa** (lo reemplaza
-`frontend/api/flights.js` + `frontend/dev-api.js`). Puedes ignorarla o borrarla.
+La primera vez, pega tu API key en el botón ⚙ (se guarda solo en tu navegador).
+
+> El mismo `npm run dev` sirve la web y la API: la función `api/flights.js`
+> (la misma que ejecuta Vercel en producción) se monta como middleware del
+> dev server de Vite. No hace falta un segundo proceso ni la carpeta `backend/`.

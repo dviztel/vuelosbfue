@@ -17,7 +17,22 @@ const TONE_STYLES = {
   amber: 'bg-amber-glow/15 text-amber-glow border-amber-glow/40',
   red: 'bg-red-500/15 text-red-300 border-red-500/30',
   slate: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
+  gray: 'bg-slate-700/50 text-slate-400 border-slate-600/50', // aterrizado/despegado
 };
+
+// Etiqueta de estado del vuelo (se muestra junto al nº de vuelo y al expandir).
+function StatusBadge({ status }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+        TONE_STYLES[status.tone] || TONE_STYLES.slate
+      }`}
+    >
+      {status.dot && <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse-glow" />}
+      {status.label}
+    </span>
+  );
+}
 
 // `direction`: 'arrivals' | 'departures'.
 //  - arrivals  → mostramos el ORIGEN (UK/IRL) y la hora de LLEGADA a FUE.
@@ -57,7 +72,10 @@ export default function FlightCard({ flight, direction }) {
               </span>
             )}
           </div>
-          <div className="mt-1 font-mono text-sm text-slate-400">{flightCode}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm text-slate-400">{flightCode}</span>
+            <StatusBadge status={status} />
+          </div>
         </div>
 
         {/* Hora del evento en FUE (zona Canarias) */}
@@ -89,16 +107,7 @@ export default function FlightCard({ flight, direction }) {
                 {icao} · {iata}
               </div>
             </div>
-            <span
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                TONE_STYLES[status.tone] || TONE_STYLES.slate
-              }`}
-            >
-              {status.dot && (
-                <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse-glow" />
-              )}
-              {status.label}
-            </span>
+            <StatusBadge status={status} />
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">

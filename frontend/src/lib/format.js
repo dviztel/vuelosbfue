@@ -46,6 +46,29 @@ export function toCanaryLongDate(date = new Date()) {
   return s.replace(/ de ([a-zà-ÿ]+) de /, (_, mon) => ` de ${mon.charAt(0).toUpperCase()}${mon.slice(1)} de `);
 }
 
+// Clave de fecha (YYYY-MM-DD) en zona de Canarias, para comparar "mismo día".
+export function canaryDateKey(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: CANARY_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+// Clave de fecha de HOY en zona de Canarias.
+export function canaryTodayKey() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: CANARY_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 // ¿La hora estimada difiere de la programada? (margen > 1 min)
 export function timesDiffer(scheduledIso, estimatedIso) {
   if (!scheduledIso || !estimatedIso) return false;
@@ -77,9 +100,12 @@ export function otherSide(flight, direction) {
 }
 
 // Mapeo del estado de AviationStack → etiqueta + color + icono.
-// Estados posibles de la API: scheduled, active, landed, cancelled,
-// incident, diverted. Añadimos "retrasado" como derivado.
-// `direction` ajusta la etiqueta (Aterrizado vs Despegado).
+// Estados que da el plan GRATUITO de la API: scheduled, active, landed,
+// cancelled, incident, diverted. "Retrasado" se deriva de la hora estimada.
+// (No existe "embarcando": la API no informa del embarque.)
+// `direction` ajusta la etiqueta (Aterrizado vs Despegado, Programado vs En tierra).
+// Colores: aterrizado/despegado = gris oscuro; en tierra/en vuelo = verde/cyan;
+// retrasado/cancelado/desviado/incidencia = rojo.
 export function describeStatus(flight, direction = 'arrivals') {
   const raw = flight?.flight_status || 'scheduled';
   const side = fueSide(flight, direction);
@@ -87,9 +113,10 @@ export function describeStatus(flight, direction = 'arrivals') {
 
   switch (raw) {
     case 'landed':
+      // Evento ya finalizado en FUE → tono neutro apagado (gris oscuro).
       return direction === 'departures'
-        ? { key: 'landed', label: 'Despegado', tone: 'green', dot: false }
-        : { key: 'landed', label: 'Aterrizado', tone: 'green', dot: false };
+        ? { key: 'landed', label: 'Despegado', tone: 'gray', dot: false }
+        : { key: 'landed', label: 'Aterrizado', tone: 'gray', dot: false };
     case 'active':
       return { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
     case 'cancelled':
@@ -101,9 +128,12 @@ export function describeStatus(flight, direction = 'arrivals') {
     case 'scheduled':
     default:
       if (delay != null && delay >= 15) {
-        return { key: 'delayed', label: `Retrasado +${delay}'`, tone: 'amber', dot: false };
+        return { key: 'delayed', label: `Retrasado +${delay}'`, tone: 'red', dot: false };
       }
-      return { key: 'scheduled', label: 'Programado', tone: 'slate', dot: false };
+      // Programado sin retraso: en salidas el avión está EN TIERRA en FUE (verde).
+      return direction === 'departures'
+        ? { key: 'scheduled', label: 'En tierra', tone: 'green', dot: false }
+        : { key: 'scheduled', label: 'Programado', tone: 'slate', dot: false };
   }
 }
 

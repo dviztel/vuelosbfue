@@ -1,60 +1,30 @@
-# ✈️ FUE Border Control
+# ✈️ No Schengen Flights · FUE Border Control
 
-Web app para **control de pasaportes en el aeropuerto de Fuerteventura (FUE)**.
-Muestra automáticamente los vuelos de **llegada desde Reino Unido e Irlanda**
-(extracomunitarios → requieren control manual), ordenados por hora de llegada,
-con horas en zona de Canarias y control del consumo de la API.
+Web app para el **control de pasaportes en el aeropuerto de Fuerteventura (FUE)**.
+Muestra los vuelos **no-Schengen** (Reino Unido e Irlanda → control manual)
+de **hoy**, en dos pestañas:
+
+- **Salidas** — vuelos que SALEN de FUE hacia UK/Irlanda.
+- **Llegadas** — vuelos que LLEGAN a FUE desde UK/Irlanda.
+
+Horas siempre en **zona de Canarias**, ordenadas de más temprano a más tarde,
+con el **estado** de cada vuelo (En tierra, En vuelo, Aterrizado/Despegado,
+Retrasado, Cancelado) y control del consumo de la API (100 req/mes).
 
 ```
 FUE Border Control/
-├── backend/      → proxy Express (llama a AviationStack por HTTP, server-side)
-└── frontend/     → React + Vite + Tailwind (PWA instalable)
+└── frontend/   → React + Vite + Tailwind (PWA) + función serverless en api/
 ```
+
+> No hay carpeta `backend/`: el único trozo de servidor es la función
+> serverless `frontend/api/flights.js` (un proxy HTTP→HTTPS sin estado). Todo
+> lo demás (API key, contador, caché) vive en el navegador de cada usuario.
 
 ---
 
-## 🚀 Arranque en local (paso a paso)
+## 🚀 Arranque en local (un solo comando)
 
-Necesitas **Node.js 18+** (tienes la v24, perfecto).
-
-### 1. Configurar la API key del backend
-
-1. Entra en `backend/`.
-2. Copia el fichero de ejemplo a `.env`:
-
-   **PowerShell:**
-   ```powershell
-   cd "$env:USERPROFILE\Desktop\Claude Docs\FUE Border Control\backend"
-   Copy-Item .env.example .env
-   ```
-
-3. Abre `.env` y pega tu clave real de AviationStack:
-
-   ```env
-   AVIATIONSTACK_KEY=tu_clave_de_aviationstack_aqui
-   PORT=3001
-   ARR_IATA=FUE
-   MONTHLY_LIMIT=100
-   ```
-
-   > 🔑 La key la sacas de tu panel: https://aviationstack.com/dashboard
-   > El `.env` está en `.gitignore`: **nunca se sube a git**.
-
-### 2. Arrancar el backend (terminal 1)
-
-```powershell
-cd "$env:USERPROFILE\Desktop\Claude Docs\FUE Border Control\backend"
-npm install      # solo la primera vez
-npm run dev
-```
-
-Verás:
-```
-✈️  FUE Border Control · backend escuchando en http://localhost:3001
-   API key: cargada ✓
-```
-
-### 3. Arrancar el frontend (terminal 2)
+Necesitas **Node.js 18+**.
 
 ```powershell
 cd "$env:USERPROFILE\Desktop\Claude Docs\FUE Border Control\frontend"
@@ -62,47 +32,57 @@ npm install      # solo la primera vez
 npm run dev
 ```
 
-Abre **http://localhost:5173** en el navegador (o en el móvil, en la misma
-red Wi-Fi, usando la IP de tu PC: `http://192.168.x.x:5173`).
+Abre **http://localhost:5173**. La primera vez te pedirá tu **API key de
+AviationStack** (botón ⚙): pégala y se guarda **solo en este dispositivo**.
 
-> En desarrollo, Vite redirige automáticamente las llamadas `/api/*` al
-> backend en el puerto 3001 (configurado en `vite.config.js`), así que no
-> tienes que tocar nada.
+> El mismo `npm run dev` sirve la web **y** la API local (la función
+> `api/flights.js` se monta como middleware de Vite). No hace falta un segundo
+> proceso. En producción, esa función la ejecuta Vercel.
+
+🔑 La key se saca gratis en https://aviationstack.com/dashboard
 
 ---
 
-## 🧠 ¿Por qué un backend proxy?
+## 🧠 ¿Por qué una función serverless?
 
 El plan **gratuito** de AviationStack **solo responde por HTTP, no HTTPS**.
-Un frontend servido por HTTPS no puede llamar a HTTP (el navegador lo bloquea
-por *mixed content*). Por eso:
+Un frontend en HTTPS no puede llamar a HTTP (el navegador lo bloquea por
+*mixed content*). La función `api/flights.js` llama por HTTP server-side y
+devuelve los datos por HTTPS:
 
 ```
-Navegador (HTTPS)  ──►  Backend Express  ──HTTP──►  AviationStack
-       ▲                      │
-       └──────  HTTPS  ───────┘
+Navegador (HTTPS)  ──►  /api/flights (Vercel)  ──HTTP──►  AviationStack
+       ▲                        │
+       └─────────  HTTPS  ──────┘
 ```
 
-El backend también:
-- Guarda la **API key** server-side (nunca llega al navegador).
-- **Cuenta** los requests usados y los persiste en `backend/usage.json`.
-- **Cachea** la última respuesta en `backend/cache.json` para no malgastar
-  requests (la carga inicial usa la caché; solo el botón "Actualizar" gasta uno).
-- **Auto-resetea** el contador al cambiar de mes (hora de Canarias).
+La función es **stateless**. El resto vive en el navegador (localStorage):
+
+- **API key** de cada usuario (cada persona la suya, en SU dispositivo).
+- **Contador** de consumo (100 req/mes), por key y por dispositivo.
+- **Caché** de la última respuesta (abrir la app NO gasta requests).
 
 ---
 
-## 🎛️ Control de consumo (solo 100 requests/mes)
+## 🎛️ Control de consumo (100 requests/mes por key)
 
 | Acción | ¿Gasta request? |
 |---|---|
-| Abrir la app (carga inicial) | **No** si hay caché. Solo la 1ª vez de todas. |
-| Botón "Actualizar vuelos" | **Sí** (1). Pide confirmación antes. |
-| Auto-refresco cada X min | **Sí** (1 por refresco). Avisa al activarlo. |
+| Abrir la app | **No** (usa la caché del dispositivo). |
+| Botón "Actualizar" | **Sí (2)**: trae llegadas + salidas. Pide confirmación. |
+| Auto-refresco cada X min | **Sí (2 por refresco)**. Avisa al activarlo. |
 | Resetear contador | No. Solo pone el contador a 0. |
 
-La barra de consumo cambia de color: **azul** (0–50) · **ámbar** (51–80) ·
-**rojo** (81–100).
+La barra de consumo: **azul** (0–50) · **ámbar** (51–80) · **rojo** (81–100).
+El contador se **auto-resetea** al cambiar de mes (hora de Canarias).
+
+---
+
+## 🗓️ Solo vuelos de HOY
+
+El plan gratuito de AviationStack no permite filtrar por fecha y devuelve
+vuelos de varios días. La app filtra **client-side** y muestra solo los del
+**día de hoy** (hora de Canarias) — incluidos los que ya han pasado hoy.
 
 ---
 
@@ -112,34 +92,17 @@ Edita `frontend/src/config/airports.js` y añade una línea en `UK_AIRPORTS`
 o `IRELAND_AIRPORTS`:
 
 ```js
-{ iata: 'XXX', name: 'Nombre legible', country: 'UK' },
+{ iata: 'XXX', city: 'Ciudad', name: 'Nombre completo', country: 'UK' },
 ```
 
 El filtro y los nombres se actualizan solos en toda la app.
 
 ---
 
-## ☁️ Deploy (Vercel / Railway)
+## ☁️ Deploy y 📱 PWA
 
-El backend **debe** seguir existiendo en producción (por el tema HTTP).
-Opciones recomendadas:
+Ver **[DESPLIEGUE.md](./DESPLIEGUE.md)** para publicar en Vercel y para
+instalarla como app en el móvil (manifest + service worker incluidos).
 
-- **Railway / Render:** despliega `backend/` como servicio Node
-  (`npm start`) y `frontend/` como sitio estático. Pon `AVIATIONSTACK_KEY`
-  en las variables de entorno del servicio backend. Apunta el frontend al
-  backend (en producción, sirve el frontend y proxea `/api` al backend, o
-  usa una variable `VITE_API_BASE`).
-- **Vercel:** el frontend va perfecto como estático; el backend conviene
-  desplegarlo aparte (Railway/Render) porque necesita estado en disco
-  (`usage.json` / `cache.json`). Si lo quieres todo en Vercel, habría que
-  mover el contador/caché a un almacén persistente (KV/Postgres).
-
-> ⚠️ En producción **no expongas** la key en el frontend bajo ningún concepto.
-
----
-
-## 📱 PWA (instalable en el móvil)
-
-Está incluida: `manifest.json` + service worker (`public/sw.js`, solo cachea
-el "shell", **nunca** los datos de la API). Tras hacer `npm run build` y servir
-el sitio por HTTPS, el navegador del móvil ofrecerá "Añadir a pantalla de inicio".
+> ⚠️ La URL de Vercel es pública: **no** pongas tu API key como variable de
+> entorno allí. Cada usuario introduce la suya dentro de la app.

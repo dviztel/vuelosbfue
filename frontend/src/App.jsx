@@ -13,7 +13,7 @@ import {
   setApiKey,
 } from './lib/api.js';
 import { MONITORED_IATA } from './config/airports.js';
-import { toCanaryLongDate } from './lib/format.js';
+import { toCanaryLongDate, canaryDateKey, canaryTodayKey } from './lib/format.js';
 
 // Intervalos disponibles para el auto-refresh (en minutos).
 const AUTO_INTERVALS = [15, 30, 60];
@@ -47,12 +47,19 @@ export default function App() {
   const flights = useMemo(() => {
     const isDep = tab === 'departures';
     const raw = isDep ? departuresRaw : arrivalsRaw;
+    const todayKey = canaryTodayKey();
     return raw
       .filter((f) => {
+        // 1) Solo el extremo UK/Irlanda (origen en llegadas, destino en salidas).
         const otherIata = (
           (isDep ? f?.arrival?.iata : f?.departure?.iata) || ''
         ).toUpperCase();
-        return MONITORED_IATA.has(otherIata);
+        if (!MONITORED_IATA.has(otherIata)) return false;
+        // 2) Solo vuelos cuyo evento en FUE es HOY (hora de Canarias). El plan
+        //    gratuito de AviationStack no filtra por fecha y mezcla varios días;
+        //    aquí nos quedamos con TODO el día de hoy (también los ya pasados).
+        const sched = (isDep ? f?.departure : f?.arrival)?.scheduled;
+        return canaryDateKey(sched) === todayKey;
       })
       .sort((a, b) => {
         const ta = new Date((isDep ? a?.departure : a?.arrival)?.scheduled || 0).getTime();
