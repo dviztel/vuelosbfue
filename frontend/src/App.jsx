@@ -130,6 +130,14 @@ export default function App() {
 
     if ('serviceWorker' in navigator && import.meta.env.PROD) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
+      // Cuando un SW nuevo toma el control, recargar UNA vez para usar ya la
+      // versión nueva (evita quedarse mostrando una versión vieja en blanco).
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        window.location.reload();
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
