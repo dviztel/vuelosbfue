@@ -74,7 +74,7 @@ export default function FlightCard({ flight, direction }) {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm text-slate-400">{flightCode}</span>
-            <StatusBadge status={status} />
+            {status && <StatusBadge status={status} />}
           </div>
         </div>
 
@@ -107,7 +107,7 @@ export default function FlightCard({ flight, direction }) {
                 {icao} · {iata}
               </div>
             </div>
-            <StatusBadge status={status} />
+            {status && <StatusBadge status={status} />}
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">

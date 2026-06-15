@@ -104,13 +104,12 @@ export function otherSide(flight, direction) {
 // cancelled, incident, diverted. "Retrasado" se deriva de la hora estimada.
 // (No existe "embarcando": la API no informa del embarque.)
 //
-// El significado depende de la PESTAÑA, porque el control de pasaportes de FUE
-// solo mira el avión MIENTRAS está/viene a FUE:
-//  - SALIDAS: solo importa si el avión SIGUE EN TIERRA en FUE (pendiente) o ya
-//    se fue. Una vez despega (active) o aterriza en destino (landed) → FINALIZADO
-//    (ya pasó el control, no interesa seguirlo). En tierra = verde, finalizado = gris.
-//  - LLEGADAS: sí interesa el seguimiento (viene hacia FUE): Programado / En vuelo
-//    / Aterrizado. Aterrizado = gris (ya está), en vuelo = cyan, programado = slate.
+// El significado depende de la PESTAÑA. Puede devolver `null` = SIN etiqueta.
+//  - SALIDAS: si aún NO ha despegado → null (no afirmamos "en tierra": el avión
+//    puede venir aún de camino, sería engañoso). En vuelo → "En vuelo".
+//    Ya aterrizó en destino → "Finalizado" (gris, ya pasó). Retrasado/cancelado = rojo.
+//  - LLEGADAS: sí interesa el seguimiento (viene hacia FUE): Programado (slate) /
+//    En vuelo (cyan) / Aterrizado (gris). Retrasado/cancelado/etc = rojo.
 // Cancelado / desviado / incidencia = rojo en ambas.
 export function describeStatus(flight, direction = 'arrivals') {
   const raw = flight?.flight_status || 'scheduled';
@@ -126,10 +125,8 @@ export function describeStatus(flight, direction = 'arrivals') {
     case 'incident':
       return { key: 'incident', label: 'Incidencia', tone: 'red', dot: false };
     case 'active':
-      // Salidas: ya despegó de FUE → finalizado. Llegadas: viene de camino.
-      return isDep
-        ? { key: 'done', label: 'Finalizado', tone: 'gray', dot: false }
-        : { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
+      // En vuelo (en ambas direcciones).
+      return { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
     case 'landed':
       // Salidas: ya aterrizó en destino → finalizado. Llegadas: ya está en FUE.
       return isDep
@@ -140,9 +137,10 @@ export function describeStatus(flight, direction = 'arrivals') {
       if (delay != null && delay >= 15) {
         return { key: 'delayed', label: `Retrasado +${delay}'`, tone: 'red', dot: false };
       }
-      // Programado sin retraso: en salidas el avión está EN TIERRA en FUE (verde).
+      // Programado sin retraso: en SALIDAS no ponemos nada (no afirmamos "en
+      // tierra"); en LLEGADAS sí, "Programado".
       return isDep
-        ? { key: 'scheduled', label: 'En tierra', tone: 'green', dot: false }
+        ? null
         : { key: 'scheduled', label: 'Programado', tone: 'slate', dot: false };
   }
 }

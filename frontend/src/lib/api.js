@@ -12,7 +12,11 @@
 //  → gasta 2 requests. Cada sentido se cachea por separado.
 // =============================================================================
 
+import { canaryDateKey, canaryTodayKey } from './format.js';
+
 const LIMIT = 100; // requests/mes del plan gratuito de AviationStack
+const PAGE_SIZE = 100; // máximo de vuelos que devuelve el plan gratuito por llamada
+const MAX_PAGES = 4; // tope de seguridad de páginas por sentido (hasta ~400 vuelos)
 
 const KEY_STORAGE = 'fue_aviationstack_key';
 const CACHE_STORAGE = 'fue_flights_cache';
@@ -143,11 +147,13 @@ export async function resetUsage() {
   return withMeta(all[id]);
 }
 
-// Una llamada REAL al proxy para un sentido. Gasta 1 request al tener éxito.
-async function fetchDirection(direction) {
+// Una PÁGINA real del proxy para un sentido (gasta 1 request al tener éxito).
+async function fetchPage(direction, offset) {
   let res;
   try {
-    res = await fetch(`/api/flights?direction=${direction}`, { headers: { ...authHeaders() } });
+    res = await fetch(`/api/flights?direction=${direction}&offset=${offset}`, {
+      headers: { ...authHeaders() },
+    });
   } catch {
     throw new Error('No se pudo contactar con el servidor.');
   }
@@ -161,9 +167,32 @@ async function fetchDirection(direction) {
 
   if (!res.ok) throw new Error(body?.error || `Error ${res.status}`);
 
-  bumpUsage(); // solo contamos si la API respondió OK
+  bumpUsage(); // cada página es 1 request real del cupo
   const list = Array.isArray(body?.flights?.data) ? body.flights.data : [];
-  return { list, fetchedAt: body?.fetchedAt || null };
+  return { list, fetchedAt: body?.fetchedAt || null, count: list.length };
+}
+
+// Trae un sentido con PAGINACIÓN. FUE tiene ~200 movimientos/día y la API solo
+// da 100 por página, así que pedimos páginas (offset 0, 100, 200…) hasta que una
+// no traiga vuelos de HOY o se agote la ventana (o el tope MAX_PAGES). Cada
+// página gasta 1 request → un refresco puede gastar entre 2 y ~6 (avisado en UI).
+async function fetchDirection(direction) {
+  const todayKey = canaryTodayKey();
+  const fueKey = direction === 'arrivals' ? 'arrival' : 'departure';
+  let all = [];
+  let fetchedAt = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (readUsage().count >= LIMIT) break; // respeta el límite mensual
+    const { list, fetchedAt: fa, count } = await fetchPage(direction, page * PAGE_SIZE);
+    if (fa) fetchedAt = fa;
+    all = all.concat(list);
+    const hasToday = list.some((f) => canaryDateKey(f?.[fueKey]?.scheduled) === todayKey);
+    // Paramos si la ventana se agotó (página incompleta) o ya no hay vuelos de hoy.
+    if (count < PAGE_SIZE || !hasToday) break;
+  }
+
+  return { list: all, fetchedAt };
 }
 
 // Refresco REAL de AMBOS sentidos. Gasta hasta 2 requests.

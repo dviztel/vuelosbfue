@@ -43,10 +43,15 @@ export default async function handler(req, res) {
       : 'arrivals';
   const param = direction === 'departures' ? 'dep_iata' : 'arr_iata';
 
+  // Paginación: FUE tiene ~200 movimientos/día y el plan gratuito devuelve como
+  // mucho 100 por llamada. Con ?offset=100, 200… el cliente pide las siguientes
+  // páginas para no perderse vuelos UK/Irlanda (cada página = 1 request).
+  const offset = Math.max(0, parseInt((req.query?.offset || '0').toString(), 10) || 0);
+
   try {
     const url =
       `${API_BASE}?access_key=${encodeURIComponent(key)}` +
-      `&${param}=${encodeURIComponent(FUE_IATA)}&limit=100`;
+      `&${param}=${encodeURIComponent(FUE_IATA)}&limit=100&offset=${offset}`;
 
     const r = await fetch(url);
     const data = await r.json();

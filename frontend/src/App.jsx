@@ -249,7 +249,7 @@ export default function App() {
       <ConfirmDialog
         open={dialog?.type === 'refresh'}
         title="¿Actualizar vuelos?"
-        message={`Trae llegadas Y salidas → consume 2 requests de tu cupo mensual (${usage.count}/${usage.limit} usados). ¿Continuar?`}
+        message={`⚠️ Trae TODOS los vuelos de hoy (llegadas + salidas, en varias páginas). Gasta entre 2 y 6 requests de tu cupo mensual (llevas ${usage.count}/${usage.limit}). ¿Continuar?`}
         confirmLabel="Sí, actualizar"
         onConfirm={handleConfirm}
         onCancel={() => setDialog(null)}
@@ -266,7 +266,7 @@ export default function App() {
       <ConfirmDialog
         open={dialog?.type === 'auto'}
         title="¿Activar auto-refresco?"
-        message={`Se actualizará cada ${dialog?.minutes} min. OJO: cada actualización consume 2 requests (llegadas + salidas) del cupo mensual.`}
+        message={`Se actualizará cada ${dialog?.minutes} min. ⚠️ OJO: cada actualización gasta entre 2 y 6 requests (trae todas las páginas del día) de tu cupo de 100/mes → con auto-refresco el cupo se agota rápido.`}
         confirmLabel="Activar"
         onConfirm={handleConfirm}
         onCancel={() => setDialog(null)}

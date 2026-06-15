@@ -31,7 +31,7 @@ export default function Header({
             onClick={onRefresh}
             disabled={refreshDisabled}
             className="rounded-lg border border-tower-700 bg-tower-800/60 px-2.5 py-2 text-base text-slate-300 transition-colors hover:border-amber-glow hover:text-amber-glow disabled:cursor-not-allowed disabled:opacity-40"
-            title="Actualizar vuelos (gasta 2 requests)"
+            title="Actualizar vuelos (gasta 2-6 requests)"
             aria-label="Actualizar vuelos"
           >
             <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>↻</span>
