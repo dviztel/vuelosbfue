@@ -52,6 +52,12 @@ export default function ApiKeyDialog({
           .
         </p>
 
+        <div className="mt-3 rounded-lg border border-amber-glow/40 bg-amber-glow/10 px-3 py-2 text-[11px] leading-relaxed text-amber-glow">
+          💡 Recomendación: <strong>no actives el auto-refresco</strong>. Cada
+          actualización gasta 2–6 requests de tus 100 al mes; con auto-refresco se
+          agota enseguida. Mejor actualiza a mano solo cuando lo necesites.
+        </div>
+
         <div className="mt-4">
           <div className="flex items-center gap-2">
             <input
