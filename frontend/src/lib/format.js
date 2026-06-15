@@ -103,35 +103,45 @@ export function otherSide(flight, direction) {
 // Estados que da el plan GRATUITO de la API: scheduled, active, landed,
 // cancelled, incident, diverted. "Retrasado" se deriva de la hora estimada.
 // (No existe "embarcando": la API no informa del embarque.)
-// `direction` ajusta la etiqueta (Aterrizado vs Despegado, Programado vs En tierra).
-// Colores: aterrizado/despegado = gris oscuro; en tierra/en vuelo = verde/cyan;
-// retrasado/cancelado/desviado/incidencia = rojo.
+//
+// El significado depende de la PESTAÑA, porque el control de pasaportes de FUE
+// solo mira el avión MIENTRAS está/viene a FUE:
+//  - SALIDAS: solo importa si el avión SIGUE EN TIERRA en FUE (pendiente) o ya
+//    se fue. Una vez despega (active) o aterriza en destino (landed) → FINALIZADO
+//    (ya pasó el control, no interesa seguirlo). En tierra = verde, finalizado = gris.
+//  - LLEGADAS: sí interesa el seguimiento (viene hacia FUE): Programado / En vuelo
+//    / Aterrizado. Aterrizado = gris (ya está), en vuelo = cyan, programado = slate.
+// Cancelado / desviado / incidencia = rojo en ambas.
 export function describeStatus(flight, direction = 'arrivals') {
   const raw = flight?.flight_status || 'scheduled';
   const side = fueSide(flight, direction);
   const delay = delayMinutes(side.scheduled, side.estimated);
+  const isDep = direction === 'departures';
 
   switch (raw) {
-    case 'landed':
-      // Evento ya finalizado en FUE → tono neutro apagado (gris oscuro).
-      return direction === 'departures'
-        ? { key: 'landed', label: 'Despegado', tone: 'gray', dot: false }
-        : { key: 'landed', label: 'Aterrizado', tone: 'gray', dot: false };
-    case 'active':
-      return { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
     case 'cancelled':
       return { key: 'cancelled', label: 'Cancelado', tone: 'red', dot: false };
     case 'diverted':
       return { key: 'diverted', label: 'Desviado', tone: 'red', dot: false };
     case 'incident':
       return { key: 'incident', label: 'Incidencia', tone: 'red', dot: false };
+    case 'active':
+      // Salidas: ya despegó de FUE → finalizado. Llegadas: viene de camino.
+      return isDep
+        ? { key: 'done', label: 'Finalizado', tone: 'gray', dot: false }
+        : { key: 'active', label: 'En vuelo', tone: 'cyan', dot: true };
+    case 'landed':
+      // Salidas: ya aterrizó en destino → finalizado. Llegadas: ya está en FUE.
+      return isDep
+        ? { key: 'done', label: 'Finalizado', tone: 'gray', dot: false }
+        : { key: 'landed', label: 'Aterrizado', tone: 'gray', dot: false };
     case 'scheduled':
     default:
       if (delay != null && delay >= 15) {
         return { key: 'delayed', label: `Retrasado +${delay}'`, tone: 'red', dot: false };
       }
       // Programado sin retraso: en salidas el avión está EN TIERRA en FUE (verde).
-      return direction === 'departures'
+      return isDep
         ? { key: 'scheduled', label: 'En tierra', tone: 'green', dot: false }
         : { key: 'scheduled', label: 'Programado', tone: 'slate', dot: false };
   }
